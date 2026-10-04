@@ -5,7 +5,7 @@ PostgREST exposes the schema as a REST API, row-level security handles authoriza
 and extensions cover search, recommendations, and scheduled jobs. A small Vite frontend
 sits on top, with Electric SQL for local-first sync.
 
-> **Status:** slice 0 (foundation). See [`docs/PLAN.md`](docs/PLAN.md) for the slice
+> **Status:** slices 0–4 built (usable app). See [`docs/PLAN.md`](docs/PLAN.md) for the slice
 > plan and [`docs/HOW_I_USE_AI.md`](docs/HOW_I_USE_AI.md) for how it is being built.
 
 ## Stack
@@ -49,6 +49,9 @@ make test       # eval gate: migrations up/down/up, pgTAP, HTTP tests, frontend 
 make psql    # shell into the app database
 make help    # all targets
 ```
+
+Then open http://localhost:5173 and sign in as `demo@manga.local` with the
+`DEMO_PASSWORD` from your `.env`, or create your own account.
 
 Postgres listens on `127.0.0.1:55432`, the REST API on `127.0.0.1:3000` (ports in `.env`).
 Demo login: `demo@manga.local` / `DEMO_PASSWORD` from `.env`. Node 24 is needed for `make dev` and `make test`.

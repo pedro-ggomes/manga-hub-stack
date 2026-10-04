@@ -43,10 +43,11 @@ docs/             plan, specs, AI workflow
 Needs Docker and make.
 
 ```bash
-make up      # build and start Postgres (creates .env from .env.example)
-make test    # eval gate: migrations up/down/up + pgTAP suite
+make bootstrap  # first run: .env with random secrets, start, migrate, configure, seed
+make test       # eval gate: migrations up/down/up, pgTAP, HTTP tests
 make psql    # shell into the app database
 make help    # all targets
 ```
 
-Postgres listens on `127.0.0.1:55432` (change `DB_PORT` in `.env`).
+Postgres listens on `127.0.0.1:55432`, the REST API on `127.0.0.1:3000` (ports in `.env`).
+Demo login: `demo@manga.local` / `DEMO_PASSWORD` from `.env`. Node 24 is needed for `make test`.

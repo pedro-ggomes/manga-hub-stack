@@ -23,6 +23,13 @@ CREATE SCHEMA auth;
 
 
 --
+-- Name: extensions; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA extensions;
+
+
+--
 -- Name: private; Type: SCHEMA; Schema: -; Owner: -
 --
 
@@ -33,7 +40,7 @@ CREATE SCHEMA private;
 -- Name: citext; Type: EXTENSION; Schema: -; Owner: -
 --
 
-CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA extensions;
 
 
 --
@@ -47,7 +54,7 @@ COMMENT ON EXTENSION citext IS 'data type for case-insensitive character strings
 -- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
 --
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 
 --
@@ -68,6 +75,57 @@ CREATE TYPE public.manga_status AS ENUM (
     'dropped',
     'plan_to_read'
 );
+
+
+--
+-- Name: token_for(uuid); Type: FUNCTION; Schema: auth; Owner: -
+--
+
+CREATE FUNCTION auth.token_for(account_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'extensions'
+    AS $$
+DECLARE
+    cfg auth.jwt_config;
+    signing_input text;
+BEGIN
+    SELECT * INTO cfg FROM auth.jwt_config;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'JWT is not configured; run make configure';
+    END IF;
+    signing_input := private.base64url(convert_to('{"alg":"HS256","typ":"JWT"}', 'utf8')) || '.'
+        || private.base64url(convert_to(jsonb_build_object(
+               'sub', account_id,
+               'role', 'authenticated',
+               -- floor: a rounded-up iat lands in the future and PostgREST rejects it
+               'iat', floor(extract(epoch FROM now()))::bigint,
+               'exp', floor(extract(epoch FROM now() + cfg.ttl))::bigint)::text, 'utf8'));
+    RETURN jsonb_build_object('token',
+        signing_input || '.' || private.base64url(hmac(signing_input, cfg.secret, 'sha256')));
+END
+$$;
+
+
+--
+-- Name: base64url(bytea); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.base64url(data bytea) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$
+    SELECT rtrim(translate(encode(data, 'base64'), E'+/\n', '-_'), '=')
+$$;
+
+
+--
+-- Name: current_user_id(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.current_user_id() RETURNS uuid
+    LANGUAGE sql STABLE
+    AS $$
+    SELECT (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')::uuid
+$$;
 
 
 --
@@ -104,6 +162,55 @@ END
 $$;
 
 
+--
+-- Name: login(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.login(email text, password text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'extensions'
+    AS $_$
+DECLARE
+    acct auth.account;
+BEGIN
+    SELECT * INTO acct FROM auth.account a WHERE a.email = login.email::citext;
+    -- Unknown emails still pay for a bcrypt compare, so timing doesn't reveal which exist.
+    IF acct.id IS NULL
+       OR crypt(coalesce(password, ''), coalesce(acct.password_hash,
+              '$2a$12$fbWcy8L44d6HWdNN5V//9uaDuRP/ybPUPP1R6b818a9V/bGlhPdfi')) <> acct.password_hash THEN
+        RAISE SQLSTATE 'PT401' USING MESSAGE = 'invalid email or password';
+    END IF;
+    RETURN auth.token_for(acct.id);
+END
+$_$;
+
+
+--
+-- Name: signup(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.signup(email text, password text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'extensions'
+    AS $$
+DECLARE
+    new_id uuid;
+BEGIN
+    IF email IS NULL OR password IS NULL THEN
+        RAISE EXCEPTION 'email and password are required' USING ERRCODE = '22023';
+    END IF;
+    -- bcrypt silently ignores bytes past 72
+    IF length(password) < 12 OR octet_length(password) > 72 THEN
+        RAISE EXCEPTION 'password must be at least 12 characters and at most 72 bytes' USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO auth.account (email, password_hash)
+    VALUES (signup.email, crypt(password, gen_salt('bf', 12)))
+    RETURNING id INTO new_id;
+    RETURN auth.token_for(new_id);
+END
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -114,10 +221,24 @@ SET default_table_access_method = heap;
 
 CREATE TABLE auth.account (
     id uuid DEFAULT uuidv7() NOT NULL,
-    email public.citext NOT NULL,
+    email extensions.citext NOT NULL,
     password_hash text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT account_email_check CHECK ((email OPERATOR(public.~) '^[^@\s]+@[^@\s]+\.[^@\s]+$'::public.citext))
+    CONSTRAINT account_email_check CHECK ((email OPERATOR(extensions.~) '^[^@\s]+@[^@\s]+\.[^@\s]+$'::extensions.citext))
+);
+
+
+--
+-- Name: jwt_config; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.jwt_config (
+    singleton boolean DEFAULT true NOT NULL,
+    secret text NOT NULL,
+    ttl interval NOT NULL,
+    CONSTRAINT jwt_config_secret_check CHECK ((length(secret) >= 32)),
+    CONSTRAINT jwt_config_singleton_check CHECK (singleton),
+    CONSTRAINT jwt_config_ttl_check CHECK ((ttl > '00:00:00'::interval))
 );
 
 
@@ -127,12 +248,13 @@ CREATE TABLE auth.account (
 
 CREATE TABLE public.manga (
     id bigint NOT NULL,
-    title public.citext NOT NULL,
+    title extensions.citext NOT NULL,
     sites jsonb DEFAULT '[]'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT private.current_user_id(),
     CONSTRAINT manga_sites_check CHECK (private.is_valid_sites(sites)),
-    CONSTRAINT manga_title_check CHECK (((title OPERATOR(public.<>) ''::public.citext) AND ((title)::text = btrim((title)::text)) AND (length((title)::text) <= 200)))
+    CONSTRAINT manga_title_check CHECK (((title OPERATOR(extensions.<>) ''::extensions.citext) AND ((title)::text = btrim((title)::text)) AND (length((title)::text) <= 200)))
 );
 
 
@@ -164,7 +286,7 @@ CREATE TABLE public.schema_migrations (
 --
 
 CREATE TABLE public.user_progress (
-    user_id uuid NOT NULL,
+    user_id uuid DEFAULT private.current_user_id() NOT NULL,
     manga_id bigint NOT NULL,
     status public.manga_status DEFAULT 'plan_to_read'::public.manga_status NOT NULL,
     last_chapter_read numeric DEFAULT 0 NOT NULL,
@@ -189,6 +311,14 @@ ALTER TABLE ONLY auth.account
 
 ALTER TABLE ONLY auth.account
     ADD CONSTRAINT account_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: jwt_config jwt_config_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.jwt_config
+    ADD CONSTRAINT jwt_config_pkey PRIMARY KEY (singleton);
 
 
 --
@@ -245,6 +375,14 @@ CREATE TRIGGER user_progress_set_updated_at BEFORE UPDATE ON public.user_progres
 
 
 --
+-- Name: manga manga_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.manga
+    ADD CONSTRAINT manga_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.account(id) ON DELETE SET NULL;
+
+
+--
 -- Name: user_progress user_progress_manga_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -261,6 +399,46 @@ ALTER TABLE ONLY public.user_progress
 
 
 --
+-- Name: manga; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.manga ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: manga manga_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY manga_insert ON public.manga FOR INSERT TO authenticated WITH CHECK ((created_by = private.current_user_id()));
+
+
+--
+-- Name: manga manga_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY manga_read ON public.manga FOR SELECT TO authenticated USING (true);
+
+
+--
+-- Name: manga manga_update_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY manga_update_own ON public.manga FOR UPDATE TO authenticated USING ((created_by = private.current_user_id()));
+
+
+--
+-- Name: user_progress; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_progress ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_progress user_progress_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY user_progress_own ON public.user_progress TO authenticated USING ((user_id = private.current_user_id())) WITH CHECK ((user_id = private.current_user_id()));
+
+
+--
 -- PostgreSQL database dump complete
 --
 
@@ -272,4 +450,5 @@ ALTER TABLE ONLY public.user_progress
 --
 
 INSERT INTO public.schema_migrations (version) VALUES
-    ('20261004202731');
+    ('20261004202731'),
+    ('20261004204339');

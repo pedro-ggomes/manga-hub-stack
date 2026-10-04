@@ -1,11 +1,13 @@
 -- Loads the seed itself, twice and with two passwords, to prove idempotency.
 BEGIN;
+-- a title that already exists without a creator (DB seeded before created_by existed)
+INSERT INTO manga (title) VALUES ('Kingdom');
 \setenv DEMO_PASSWORD first-password-123
-\i /db/seed.sql
+\i /src/db/seed.sql
 \setenv DEMO_PASSWORD second-password-456
-\i /db/seed.sql
+\i /src/db/seed.sql
 
-SELECT plan(7);
+SELECT plan(8);
 
 SELECT is((SELECT count(*) FROM manga), 18::bigint, '18 titles after seeding twice');
 SELECT is((SELECT count(*) FROM user_progress p JOIN auth.account a ON a.id = p.user_id
@@ -22,6 +24,9 @@ SELECT ok((SELECT password_hash LIKE '$2%' FROM auth.account WHERE email = 'demo
           'demo password is stored as a bcrypt hash');
 SELECT ok((SELECT password_hash = crypt('second-password-456', password_hash) FROM auth.account
            WHERE email = 'demo@manga.local'), 're-seeding applies the new DEMO_PASSWORD');
+
+SELECT is((SELECT count(*) FROM manga m JOIN auth.account a ON a.id = m.created_by WHERE a.email = 'demo@manga.local'),
+          18::bigint, 'every seeded title is owned by the demo user, including pre-existing ones');
 
 SELECT * FROM finish();
 ROLLBACK;

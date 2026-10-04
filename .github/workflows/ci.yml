@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: cp .env.example .env
+      - run: make up
+      - run: make test
+      - if: github.event_name == 'pull_request'
+        run: make check-frozen BASE=origin/${{ github.base_ref }}

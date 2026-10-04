@@ -25,9 +25,16 @@ export async function api<T>(path: string, { method = 'GET', body, token, prefer
   if (prefer) headers.Prefer = prefer;
   const res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(res.status, data?.message ?? res.statusText);
-  return data as T;
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      message = JSON.parse(text).message ?? message;
+    } catch {
+      // non-JSON error body (e.g. proxy error page): keep the status text
+    }
+    throw new ApiError(res.status, message);
+  }
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export const statusLabel = (s: Status): string => s[0].toUpperCase() + s.slice(1).replaceAll('_', ' ');

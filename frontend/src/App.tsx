@@ -31,7 +31,8 @@ function SignIn({ onToken }: { onToken: (token: string) => void }) {
       });
       onToken(token);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reach the server');
+      if (err instanceof ApiError && err.status === 409) setError('An account with this email already exists');
+      else setError(err instanceof ApiError ? err.message : 'Could not reach the server');
     }
   }
 

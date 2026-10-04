@@ -72,7 +72,7 @@ function MangaCard({ row }: { row: Progress }) {
       <p className="links">
         {primary && <a href={primary.url} target="_blank" rel="noopener noreferrer">Read</a>}
         {alts.map((s, i) => (
-          <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer">Alt {i + 1}</a>
+          <a key={i} href={s.url} target="_blank" rel="noopener noreferrer">Alt {i + 1}</a>
         ))}
       </p>
     </article>

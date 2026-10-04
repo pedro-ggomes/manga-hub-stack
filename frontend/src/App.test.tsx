@@ -109,3 +109,30 @@ test('AC9: empty library says so', async () => {
   render(<App />);
   expect(await screen.findByText(/nothing tracked yet/i)).toBeTruthy();
 });
+
+test('review: a non-JSON error body still becomes an ApiError (401 signs out)', async () => {
+  localStorage.setItem('token', 'tok-1');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Unauthorized</html>', { status: 401, statusText: 'Unauthorized' })));
+  render(<App />);
+  expect(await screen.findByRole('button', { name: /sign in/i })).toBeTruthy();
+});
+
+test('review: signing up with a taken email shows a friendly message, not the DB error', async () => {
+  stubApi({ 'POST /rpc/signup': () => ({ status: 409, body: { message: 'duplicate key value violates unique constraint "account_email_key"' } }) });
+  render(<App />);
+  await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+  await userEvent.type(screen.getByLabelText(/email/i), 'demo@manga.local');
+  await userEvent.type(screen.getByLabelText(/password/i), 'a-long-password');
+  await userEvent.click(screen.getByRole('button', { name: /sign up/i }));
+  expect((await screen.findByRole('alert')).textContent).toBe('An account with this email already exists');
+});
+
+test('review: duplicate alt URLs both render', async () => {
+  localStorage.setItem('token', 'tok-1');
+  const dup = [{ ...rows[0], manga: { ...rows[0].manga, sites: [
+    { url: 'https://op.example/', type: 'primary' }, { url: 'https://same.example/', type: 'alt' }, { url: 'https://same.example/', type: 'alt' }] } }];
+  stubApi({ 'GET /user_progress': () => ({ status: 200, body: dup }) });
+  render(<App />);
+  const card = await screen.findByRole('article', { name: 'One Piece' });
+  expect(within(card).getAllByRole('link', { name: /alt/i })).toHaveLength(2);
+});

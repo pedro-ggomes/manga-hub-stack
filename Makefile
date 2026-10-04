@@ -78,7 +78,7 @@ else
 endif
 
 check-frozen: ## Fail if this branch changed a migration that is already on main
-	@changed=$$(git diff --name-only --diff-filter=MDR $(BASE)...HEAD -- db/migrations) || exit 1; \
+	@changed=$$(git diff --name-only --diff-filter=MDR $(BASE)...HEAD -- 'db/migrations/*.sql') || exit 1; \
 	if [ -n "$$changed" ]; then \
 		echo "Migrations merged to main are frozen; add a new migration instead:"; \
 		echo "$$changed"; exit 1; \

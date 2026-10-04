@@ -13,7 +13,7 @@ BASE       ?= origin/main
 
 .DEFAULT_GOAL := help
 .PHONY: help up down nuke logs psql migrate rollback migrate-redo new-migration reset \
-        test test-db check-migrations check-frozen
+        seed test test-db check-migrations check-frozen
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -44,15 +44,19 @@ migrate: ## Apply pending migrations and dump db/schema.sql
 rollback: ## Roll back the latest migration
 	$(DBMATE) rollback
 
-migrate-redo: rollback migrate ## Re-run the latest migration (for editing unmerged ones)
+migrate-redo: rollback migrate ## Re-run the latest migration (unmerged, down unchanged; else make reset)
 
 new-migration: ## Create a migration: make new-migration name=create_manga
 	@test -n "$(name)" || (echo "usage: make new-migration name=<slug>" && exit 1)
 	$(DBMATE) new $(name)
 
-reset: ## Drop and rebuild the app database from migrations
+seed: ## Load the dev seed (idempotent)
+	$(COMPOSE) exec -T -e DEMO_PASSWORD db psql -v ON_ERROR_STOP=1 -1 -q -U $(POSTGRES_USER) -d $(POSTGRES_DB) -f /db/seed.sql
+
+reset: ## Drop and rebuild the app database from migrations, then seed
 	$(DBMATE) drop
 	$(DBMATE) up
+	$(MAKE) seed
 
 # --- eval gate ---------------------------------------------------------------
 test: check-migrations test-db ## Run the full eval gate

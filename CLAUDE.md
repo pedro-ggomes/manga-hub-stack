@@ -21,7 +21,9 @@ slice is reported done.
 
 ## Never
 1. Never edit a migration that has been merged to `main` (after its human gate). Add a
-   new migration instead. Unmerged migrations may be edited (`make migrate-redo`).
+   new migration instead. Unmerged migrations may be edited: `make migrate-redo` if only
+   the `up` section changed, `make reset` if `down` changed too (the new `down` cannot
+   roll back the old `up`).
    Enforced by `make check-frozen` in CI.
 2. Never commit `.env` or any secret. Config comes from the environment.
 3. Never grant table privileges to `anon`, and never expose the `auth` schema through

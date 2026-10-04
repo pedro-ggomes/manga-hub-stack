@@ -15,7 +15,7 @@ BASE       ?= origin/main
 
 .DEFAULT_GOAL := help
 .PHONY: help check-env bootstrap up down nuke logs psql migrate rollback migrate-redo new-migration reset \
-        configure seed test test-db test-api check-migrations check-frozen
+        configure seed dev test test-db test-api test-web check-migrations check-frozen
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -48,6 +48,13 @@ logs: ## Follow logs
 psql: ## Open psql on the app database
 	$(COMPOSE) exec db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
+frontend/node_modules: frontend/package-lock.json
+	cd frontend && npm ci --no-fund
+	@touch $@
+
+dev: frontend/node_modules ## Run the web app on http://localhost:5173 (needs make up)
+	cd frontend && npm run dev
+
 # --- migrations --------------------------------------------------------------
 migrate: ## Apply pending migrations, dump db/schema.sql, reload the API schema cache
 	$(DBMATE) up
@@ -78,7 +85,10 @@ reset: ## Drop and rebuild the app database from migrations, then seed
 	$(COMPOSE) up -d postgrest
 
 # --- eval gate ---------------------------------------------------------------
-test: check-migrations test-db test-api ## Run the full eval gate
+test: check-migrations test-db test-api test-web ## Run the full eval gate
+
+test-web: frontend/node_modules ## Frontend typecheck + component tests
+	cd frontend && npm run typecheck && npm test
 
 test-db: ## Rebuild the test DB from migrations and run pgTAP tests
 	$(DROP_TEST)

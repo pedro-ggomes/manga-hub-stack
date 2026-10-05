@@ -3,18 +3,18 @@
 Approved 2026-10-04. One slice = one branch = one PR, each with a spec in
 `docs/specs/` written before code. ⛔ = core: needs a human review gate before merge.
 
-| # | Slice | Core | Spec |
-|---|-------|------|------|
-| 0 | Foundation: Postgres image, compose, Makefile, CI, migration checks, AI-workflow doc | | [00](specs/00-foundation.md) |
-| 1 | Schema + seed: `manga`, `user_progress`, `manga_status`, constraints, triggers | ⛔ | |
-| 2 | Auth + RLS: signup/login RPCs, JWT in SQL, roles, policies, PostgREST | ⛔ | |
-| 3 | Frontend read: login, library list, status filter, search, site links | | |
-| 4 | Frontend write: add manga, track/untrack, chapter +1/set, status, worth-reading | | |
-| 5 | pg_graphql via PostgREST `rpc/graphql`, RLS-respecting | | |
-| 6 | Recommendations: Jikan synopses, Ollama embeddings, pgvector HNSW, `recommend()` | | |
-| 7 | pg_cron: nightly progress snapshot, `reading_stats()` | | |
-| 8 | pg_mooncake columnstore analytics (preview build, revertible) | ⛔ | |
-| 9 | Electric live sync + FastAPI auth proxy | ⛔ | |
+| # | Slice | Core | Spec | Status |
+|---|-------|------|------|--------|
+| 0 | Foundation: Postgres image, compose, Makefile, CI, migration checks, AI-workflow doc | | [00](specs/00-foundation.md) | merged #1 |
+| 1 | Schema + seed: `manga`, `user_progress`, `manga_status`, constraints, triggers | ⛔ | [01](specs/01-schema.md) | merged #3 |
+| 2 | Auth + RLS: signup/login RPCs, JWT in SQL, roles, policies, PostgREST | ⛔ | [02](specs/02-auth-rls.md) | PR #4 |
+| 3 | Frontend read: login, library list, status filter, search, site links | | [03](specs/03-frontend-read.md) | PR #5 |
+| 4 | Frontend write: add manga, track/untrack, chapter +1/set, status, worth-reading | | [04](specs/04-frontend-write.md) | PR #6 |
+| 5 | pg_graphql via PostgREST `rpc/graphql`, RLS-respecting | | | |
+| 6 | Recommendations: Jikan synopses, Ollama embeddings, pgvector HNSW, `recommend()` | | | |
+| 7 | pg_cron: nightly progress snapshot, `reading_stats()` | | | |
+| 8 | pg_mooncake columnstore analytics (preview build, revertible) | ⛔ | | |
+| 9 | Electric live sync + FastAPI auth proxy | ⛔ | | |
 
 ## Decisions
 

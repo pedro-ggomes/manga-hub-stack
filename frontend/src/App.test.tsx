@@ -63,13 +63,14 @@ const openLibrary = async () => {
 test('AC5: each title shows status, chapter and its site links', async () => {
   await openLibrary();
   const kingdom = screen.getByRole('article', { name: 'Kingdom' });
-  expect(within(kingdom).getByText(/703\.7/)).toBeTruthy();
+  expect((within(kingdom).getByLabelText(/last chapter read/i) as HTMLInputElement).value).toBe('703.7');
+  expect((within(kingdom).getByLabelText(/status/i) as HTMLSelectElement).value).toBe('reading');
   const read = within(kingdom).getByRole('link', { name: /read/i });
   expect(read.getAttribute('href')).toBe('https://k.example/');
   expect(read.getAttribute('target')).toBe('_blank');
   expect(read.getAttribute('rel')).toContain('noopener');
   expect(within(kingdom).getByRole('link', { name: /alt/i }).getAttribute('href')).toBe('https://k-alt.example/');
-  expect(within(screen.getByRole('article', { name: 'JJBA - Steel Ball Run' })).queryByRole('link')).toBeNull();
+  expect(within(screen.getByRole('article', { name: 'JJBA - Steel Ball Run' })).queryAllByRole('link')).toEqual([]);
 });
 
 test('AC6: status filter shows only that status, with counts', async () => {

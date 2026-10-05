@@ -1,7 +1,8 @@
 import { vi } from 'vitest';
 
 export type Call = { method: string; path: string; body: unknown; auth: string | null };
-type Handler = (call: Call) => { status: number; body?: unknown };
+type Reply = { status: number; body?: unknown };
+type Handler = (call: Call) => Reply | Promise<Reply>;
 
 /** Stub fetch at the boundary. Routes are matched by `METHOD /path` prefix (query included). */
 export function stubApi(routes: Record<string, Handler>): Call[] {
@@ -14,7 +15,7 @@ export function stubApi(routes: Record<string, Handler>): Call[] {
     calls.push(call);
     const key = Object.keys(routes).find((k) => `${method} ${path}`.startsWith(k));
     if (!key) throw new Error(`unexpected request: ${method} ${path}`);
-    const { status, body } = routes[key](call);
+    const { status, body } = await routes[key](call);
     return new Response(body === undefined ? null : JSON.stringify(body), { status });
   }));
   return calls;
@@ -28,3 +29,10 @@ export const rows = [
   { manga_id: 3, status: 'plan_to_read', last_chapter_read: 0, worth_reading: null,
     manga: { id: 3, title: 'JJBA - Steel Ball Run', sites: [] } },
 ];
+
+/** A promise you resolve from the test, to control when a stubbed response arrives. */
+export function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}

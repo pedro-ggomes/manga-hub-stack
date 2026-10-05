@@ -6,8 +6,8 @@ SELECT set_config('seed.demo_password', :'demo_password', true) IS NOT NULL AS s
 
 DO $$
 BEGIN
-    IF length(current_setting('seed.demo_password')) < 12 THEN
-        RAISE EXCEPTION 'DEMO_PASSWORD must be at least 12 characters';
+    IF length(current_setting('seed.demo_password')) < 12 OR octet_length(current_setting('seed.demo_password')) > 72 THEN
+        RAISE EXCEPTION 'DEMO_PASSWORD must be at least 12 characters and at most 72 bytes';
     END IF;
 END
 $$;
@@ -40,9 +40,9 @@ INSERT INTO seed VALUES
     ('Kingdom',            'reading', 703.7, '[{"url": "https://cubari.moe/read/weebcentral/01J76XY7VSG3R5ANYPDWTXDVP6/", "type": "primary"}]', true),
     ('JJBA - Steel Ball Run', 'plan_to_read', 0, '[{"url": "https://mangadex.org/title/1044287a-73df-48d0-b0b2-5327f32dd651/jojo-no-kimyou-na-bouken-part-7-steel-ball-run-color-ban", "type": "primary"}]', NULL);
 
-INSERT INTO manga (title, sites)
-SELECT title, sites FROM seed
-ON CONFLICT (title) DO NOTHING;
+INSERT INTO manga (title, sites, created_by)
+SELECT title, sites, (SELECT id FROM auth.account WHERE email = 'demo@manga.local') FROM seed
+ON CONFLICT (title) DO UPDATE SET created_by = coalesce(manga.created_by, excluded.created_by);
 
 INSERT INTO user_progress (user_id, manga_id, status, last_chapter_read, worth_reading)
 SELECT a.id, m.id, s.status, s.chapter, s.worth_reading

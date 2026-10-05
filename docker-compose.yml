@@ -10,12 +10,37 @@ services:
       - "127.0.0.1:${DB_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql
-      - ./db:/db:ro
+      - .:/src:ro  # repo root: a branch switch can replace db/, which would leave a db/ mount stale
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 2s
       timeout: 3s
       retries: 30
+
+  postgrest: &postgrest
+    image: postgrest/postgrest:v16.4
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &postgrest-env
+      PGRST_DB_URI: postgres://authenticator:${AUTHENTICATOR_PASSWORD}@db:5432/${POSTGRES_DB}
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_EXTRA_SEARCH_PATH: extensions
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_ADMIN_SERVER_PORT: 3001
+    ports:
+      - "127.0.0.1:${API_PORT}:3000"
+
+  # Same API over the throwaway test DB, so HTTP tests never touch dev data.
+  postgrest-test:
+    <<: *postgrest
+    profiles: [test]
+    environment:
+      <<: *postgrest-env
+      PGRST_DB_URI: postgres://authenticator:${AUTHENTICATOR_PASSWORD}@db:5432/manga_test
+    ports:
+      - "127.0.0.1:${API_TEST_PORT}:3000"
 
   dbmate:
     image: ghcr.io/amacneil/dbmate:2.36.0

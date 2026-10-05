@@ -44,10 +44,11 @@ Needs Docker and make.
 
 ```bash
 make bootstrap  # first run: .env with random secrets, start, migrate, configure, seed
-make test       # eval gate: migrations up/down/up, pgTAP, HTTP tests
+make dev        # web app on http://localhost:5173
+make test       # eval gate: migrations up/down/up, pgTAP, HTTP tests, frontend tests
 make psql    # shell into the app database
 make help    # all targets
 ```
 
 Postgres listens on `127.0.0.1:55432`, the REST API on `127.0.0.1:3000` (ports in `.env`).
-Demo login: `demo@manga.local` / `DEMO_PASSWORD` from `.env`. Node 24 is needed for `make test`.
+Demo login: `demo@manga.local` / `DEMO_PASSWORD` from `.env`. Node 24 is needed for `make dev` and `make test`.
